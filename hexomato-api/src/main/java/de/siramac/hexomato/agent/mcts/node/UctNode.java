@@ -1,5 +1,7 @@
-package de.siramac.hexomato.agent.mcts;
+package de.siramac.hexomato.agent.mcts.node;
 
+import de.siramac.hexomato.agent.mcts.MctsNode;
+import de.siramac.hexomato.agent.mcts.SelectionResult;
 import de.siramac.hexomato.domain.Game;
 import de.siramac.hexomato.domain.Node;
 import de.siramac.hexomato.domain.Player;
@@ -12,33 +14,31 @@ import static de.siramac.hexomato.agent.mcts.Util.getArgMax;
 import static de.siramac.hexomato.domain.Player.PLAYER_1;
 import static de.siramac.hexomato.domain.Player.PLAYER_2;
 
-public class UCTNode {
-    private final Node[][] state;
-    private final Player activePlayer;
-    private final Integer action; // index to availableActions
-    private final UCTNode parent;
-    private final Map<Integer, UCTNode> children;
-    private final Node[] validActions;
+public class UctNode implements MctsNode {
+    protected final Node[][] state;
+    protected final Player activePlayer;
+    protected final Integer action; // index to availableActions
+    protected final UctNode parent;
+    protected final Map<Integer, UctNode> children;
+    protected final Node[] validActions;
 
-    private final double[] childValues;
-    private final double[] childVisits;
+    protected final double[] childValues;
+    protected final double[] childVisits;
+
+    @Getter
+    protected final Player winner;
+    protected final BridgePattern bridgePattern;
+    protected final Random random;
 
     private final double EXPLORATION_COEFFICIENT = Math.sqrt(2);
 
-    @Getter
-    private final Player winner;
-
-    private final Random random;
-    private final BridgePattern bridgePattern;
-
-    public UCTNode(
+    public UctNode(
             Node[][] state,
             Player activePlayer,
             Node[] validActions,
             Player winner,
             Integer action,
-            UCTNode parent
-    ) {
+            UctNode parent) {
         this.state = state;
         this.activePlayer = activePlayer;
         this.validActions = validActions;
@@ -67,11 +67,11 @@ public class UCTNode {
      * - W_i: number of times child_i won
      * - N_i: number of times child_i visited
      * <p>
-     * - exploration = EXPLORATION_COEFFICIENT * Math.sqrt(Math.log(N)) / N_i
+     * - exploration = c * Math.sqrt(Math.log(N)) / N_i
      * - N: number of times parent visited
-     * - EXPLORATION_COEFFICIENT: adjust the amount of exploration
+     * - c: EXPLORATION_COEFFICIENT adjusts the amount of exploration
      */
-    public double[] calculateUpperConfidenceBoundForTrees() {
+    public double[] calculateUpperConfidenceBoundForTrees(double c) {
         double[] UCB = new double[validActions.length];
         double N = Arrays.stream(childVisits).sum();
 
@@ -88,7 +88,7 @@ public class UCTNode {
             double exploitation = W_i / N_i;
 
             // exploration
-            double exploration = EXPLORATION_COEFFICIENT * (Math.sqrt(Math.log(N)) / N_i);
+            double exploration = c * (Math.sqrt(Math.log(N)) / N_i);
 
             // sum
             UCB[i] = exploitation + exploration;
@@ -97,17 +97,18 @@ public class UCTNode {
         return UCB;
     }
 
+    @Override
     public SelectionResult select() {
-        UCTNode currentNode = this;
+        UctNode currentNode = this;
         Integer bestAction;
 
         while (true) {
-            if (currentNode.validActions.length == 0) {
+            if (currentNode.validActions.length == 0  || currentNode.getWinner() != null) {
                 bestAction = null;
                 break;
             }
 
-            double[] uctValues = currentNode.calculateUpperConfidenceBoundForTrees();
+            double[] uctValues = currentNode.calculateUpperConfidenceBoundForTrees(EXPLORATION_COEFFICIENT);
             bestAction = getArgMax(uctValues);
 
             if (currentNode.children.containsKey(bestAction)) {
@@ -119,15 +120,16 @@ public class UCTNode {
         return new SelectionResult(currentNode, bestAction);
     }
 
-    public UCTNode expand(Game simulationEnv, Integer nextAction) {
+    @Override
+    public UctNode expand(Game simulationEnv, Integer nextAction) {
         simulationEnv.reset(state, activePlayer, winner);
-        UCTNode child = this;
+        UctNode child = this;
 
         if (winner == null) {
             // FIXME: nextAction can be null
             Node validAction = validActions[nextAction];
             simulationEnv.makeMoveOnBoard(validAction.getRow(), validAction.getCol(), activePlayer);
-            child = new UCTNode(
+            child = new UctNode(
                     simulationEnv.getBoard(),
                     simulationEnv.getTurn(),
                     simulationEnv.getValidActions(),
@@ -148,6 +150,7 @@ public class UCTNode {
      * After that, find a winning path from the first row of the board for PLAYER_1.
      * If a path was found, the winner is PLAYER_1, else PLAYER_2.
      */
+    @Override
     public Player simulate(Game simulationEnv) {
         if (winner != null) return winner;
         simulationEnv.reset(state, activePlayer, null);
@@ -189,8 +192,9 @@ public class UCTNode {
         return isPlayer1Winner ? PLAYER_1 : PLAYER_2;
     }
 
+    @Override
     public void backup(Player winner) {
-        UCTNode currentNode = this;
+        UctNode currentNode = this;
 
         while (true) {
             Integer currentAction = currentNode.action;

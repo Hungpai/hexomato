@@ -2,6 +2,7 @@ package de.siramac.hexomato.service;
 
 import de.siramac.hexomato.agent.Agent;
 import de.siramac.hexomato.agent.mcts.MctsAgent;
+import de.siramac.hexomato.agent.mcts.node.NodeType;
 import de.siramac.hexomato.domain.Game;
 import de.siramac.hexomato.domain.GameRepository;
 import de.siramac.hexomato.domain.Node;
@@ -29,7 +30,20 @@ public class GameService {
 
     public Game createGame(Player player, boolean humanPlayer, String name) {
         if (!humanPlayer) {
-            agent = new MctsAgent(player, new Game(player, false, name));
+            if (name.equals("Monte-Carlo")) {
+                agent = new MctsAgent(
+                    NodeType.AMAF,
+                    player,
+                    new Game(player, false, name),
+                    1_500);
+            }
+            if (name.equals("αMax")) {
+                agent = new MctsAgent(
+                    NodeType.UCT,
+                    player,
+                    new Game(player, false, name),
+                    1_000);
+            }
         }
 
         Game game = new Game(player, humanPlayer, name);
@@ -120,10 +134,10 @@ public class GameService {
 
     public boolean isAiTurn(Game game) {
         return isValidGameState(game) &&
-                (
-                        (game.getTurn() == PLAYER_1 && !game.isHumanPlayer1())
-                                || (game.getTurn() == PLAYER_2 && !game.isHumanPlayer2())
-                );
+            (
+                (game.getTurn() == PLAYER_1 && !game.isHumanPlayer1())
+            ||  (game.getTurn() == PLAYER_2 && !game.isHumanPlayer2())
+            );
     }
 
     public Game makeAiMove(Game game) {

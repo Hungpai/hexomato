@@ -1,6 +1,7 @@
 package de.siramac.hexomato.agent.mcts;
 
 import de.siramac.hexomato.agent.Agent;
+import de.siramac.hexomato.agent.mcts.node.NodeType;
 import de.siramac.hexomato.domain.Game;
 import de.siramac.hexomato.domain.Node;
 import de.siramac.hexomato.domain.Player;
@@ -13,42 +14,57 @@ import static de.siramac.hexomato.agent.mcts.Util.getArgMax;
 @AllArgsConstructor
 public class MctsAgent implements Agent {
 
+    private NodeType nodeType;
     private Player player;
     private Game simulationEnv;
-    final long SIMULATION_TIME = 2_000; // in milliseconds
+    private long simulationTime; // in milliseconds
+
+    public MctsAgent(NodeType nodeType, Player player, Game simulationEnv) {
+        // call AllArgsConstructor
+        this(nodeType, player, simulationEnv, 2000);
+    }
 
     @Override
     public Node getMove(Game game) {
         simulationEnv.reset(game.getBoard(), player, game.getWinner()); // update simulation environment to current env
-        UCTNode rootNode = monteCarloTreeSearch();
+        MctsNode rootNode = monteCarloTreeSearch();
         double[] policy = rootNode.calculatePolicy();
         int argmax = getArgMax(policy);
         return game.getValidActions()[argmax];
     }
 
-    private UCTNode monteCarloTreeSearch() {
-        long startTime = System.currentTimeMillis();
-        UCTNode rootNode = new UCTNode(
-                simulationEnv.getBoard(),
-                simulationEnv.getTurn(),
-                simulationEnv.getValidActions(),
-                simulationEnv.getWinner(),
-                null,
-                null
+    private MctsNode monteCarloTreeSearch() {
+        MctsNode rootNode = MctsNodeFactory.createMctsNode(
+            nodeType,
+            simulationEnv.getBoard(),
+            simulationEnv.getTurn(),
+            simulationEnv.getValidActions(),
+            simulationEnv.getWinner(),
+            null,
+            null
         );
+
         int numSimulations = 0;
-        while (System.currentTimeMillis() - startTime < SIMULATION_TIME) {
+        long startTime = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startTime < simulationTime) {
 
             // Selection
             SelectionResult selectionResult = rootNode.select();
-            UCTNode selectedNode = selectionResult.node();
+            MctsNode selectedNode = selectionResult.node();
             Integer nextAction = selectionResult.action();
 
-            // Expansion
-            UCTNode leafNode = selectedNode.expand(simulationEnv, nextAction);
-            Player winner = selectedNode.getWinner();
+            // Expansion: skip expansion phase if selected node
+            // 1. has no valid actions (board is full)
+            // 2. or selected node is an end state (player win)
+            MctsNode leafNode;
+            if (nextAction != null) {
+                leafNode = selectedNode.expand(simulationEnv, nextAction);
+            } else {
+                leafNode = selectedNode;
+            }
 
             // Simulation
+            Player winner = selectedNode.getWinner();
             if (winner == null) {
                 winner = leafNode.simulate(simulationEnv);
             }
