@@ -64,7 +64,7 @@ public class MctsAgent implements Agent {
             }
 
             // Simulation
-            Player winner = selectedNode.getWinner();
+            Player winner = leafNode.getWinner();
             if (winner == null) {
                 winner = leafNode.simulate(simulationEnv);
             }
